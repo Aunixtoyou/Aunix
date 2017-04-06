@@ -1,0 +1,376 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>8023 Game</title>
+
+    <script type="text/javascript" src="javascripts/jquery-3.1.1.min.js"></script>
+</head>
+
+<body>
+		<canvas id="myCanvas" width="500" height="600"></canvas>
+</body>
+	<script type="text/javascript">
+		var map = "#BBADA0";
+
+		//0 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192
+		var colorNum = ["#D6CDC4","#EEE4DA","#EDE0C8","#F2B179","#F59563","#F67C5F","#F65E3B","#EDCF72","#EDCC61","#E6BE38","#E7BB27","#EFC525","#EE6668","#383732"];
+
+		var c=document.getElementById("myCanvas");
+		var cxt=c.getContext("2d");
+		
+
+		//var array = [[2,4,8,16],[32,64,128,512],[1024,2048,4096,8192],[2,2,0,0]];
+		var array = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+		var position =new Array(16);
+
+		var MAX_NUM = 4;
+		var score = 0;
+		var historyScore = 0;
+
+		var db = openDatabase('mydb', '1.0', 'Test DB', 2 * 1024 * 1024);
+		db.transaction(function (tx) {  
+   			tx.executeSql('CREATE TABLE IF NOT EXISTS LOGS (id unique, historyScore)');
+
+   			var row = 0;
+   			tx.executeSql('SELECT * FROM LOGS',[],function(tx,results){
+   				row = results.rows.length;
+
+   				for(var i = 0; i<row; i++){
+   					historyScore = results.rows.item(0).historyScore;
+   					//console.log(results.rows.item(0).historyScore);
+   				}
+   			});
+
+   			if(0==row){
+   				tx.executeSql('INSERT INTO LOGS (id, historyScore) VALUES (1, 0)');
+   			};
+   			
+		});
+
+		function setHistory(){
+			db.transaction(function (tx) {
+				tx.executeSql('UPDATE LOGS SET historyScore='+score+' WHERE id=1');
+			});
+
+			historyScore = score;
+			//console.log(historyScore);
+		}
+
+		function drawScore(){
+			drawText(cxt,18,265,96,score,"#FFFFFF");
+			drawText(cxt,18,365,96,historyScore,"#FFFFFF");
+		}
+
+        function drawMap(){
+        	var pX, pY;
+
+        	cxt.clearRect(0,0,410,580);
+
+        	drawRoundRect(cxt,0,0,410,580,5);
+			cxt.fillStyle= "#F6EFE5";
+			cxt.fill();
+			drawRoundRect(cxt,0,190,410,440,5);
+			cxt.fillStyle= map;
+			cxt.fill();
+
+			drawText(cxt,20,50,20,"无尽模式","#746D63");
+			drawText(cxt,70,100,80,"2048","#746D63");
+
+			drawRoundRect(cxt,220,54,90,60,4,0);//分数背景边框
+			cxt.fillStyle= map;
+			cxt.fill();
+			drawRoundRect(cxt,320,54,90,60,4,0);//
+			cxt.fillStyle= map;
+			cxt.fill();
+
+			drawText(cxt,16,265,68,"分","#FFFFFF");
+			drawText(cxt,16,365,68,"历史最高","#FFFFFF");
+        	
+        	//绘制地图
+        	for(var y=1; y<=4; y++){
+        		for(var x=1; x<=4; x++){
+
+        			pX = 20 + (10 * x + 80 * (x - 1));
+        			pY = 220 + (10 * y + 80 * (y - 1));
+        			drawRoundRect(cxt, pX, pY, 80, 80, 4, array[y-1][x-1]);
+
+        			if (0!=array[y-1][x-1]) {
+        				drawRectText(cxt, pX, pY, array[y-1][x-1]);
+        			}
+        		
+        		}
+       		}
+        }
+
+		
+        
+        //绘制圆角矩形
+		function drawRoundRect(cxt, x, y, width, height, radius, number){
+			cxt.beginPath();
+			cxt.arc(x + radius, y + radius, radius, Math.PI, Math.PI * 3 / 2);   
+        	cxt.lineTo(width - radius + x, y);   
+       		cxt.arc(width - radius + x, radius + y, radius, Math.PI * 3 / 2, Math.PI * 2);   
+        	cxt.lineTo(width + x, height + y - radius);   
+        	cxt.arc(width - radius + x, height - radius + y, radius, 0, Math.PI * 1 / 2);
+        	cxt.lineTo(radius + x, height +y);   
+        	cxt.arc(radius + x, height - radius + y, radius, Math.PI * 1 / 2, Math.PI);
+        	cxt.fillStyle=colorNum[log_2(number)];
+        	cxt.fill();
+			cxt.closePath();
+		}
+
+		//绘制矩形里面数字
+		function drawRectText(cxt, x, y, text){
+			cxt.beginPath();
+        	cxt.font = 'bold 20px arial';
+        	if(text>8){
+        		cxt.fillStyle='#F8F3EF';
+        	}else{
+        		cxt.fillStyle='#797066';
+        	}
+       		
+       		cxt.textAlign='center';
+       		cxt.textBaseline='middle';
+        	cxt.fillText(text,x+40,y+40);
+        	cxt.closePath();
+		}
+		function drawText(cxt,fontsize,x,y,text,fontcolor){
+			cxt.beginPath();
+			cxt.font = 'bold '+fontsize+'px arial';
+			cxt.textAlign='center';
+			cxt.fillStyle=fontcolor;
+       		cxt.textBaseline='middle';
+       		cxt.fillText(text,x,y);
+        	cxt.closePath();
+		}
+
+		//计算一个整数是2的几次幂
+		function log_2(value){
+        	if(value==0 || value==1){
+            	return 0;
+        	}else{
+            	return 1+log_2(value>>1);
+        	}
+    	}
+
+    	function moveSpace(e){
+    		var isMove = false;
+    		if(37==e.keyCode || 65==e.keyCode){
+    			for(var y=0; y<MAX_NUM; y++){
+					for(var i=0; i<MAX_NUM-1;i++){
+						for(var x=0; x<MAX_NUM-1; x++){
+							if(0==array[y][x]&&0!=array[y][x+1]){
+								array[y][x]=array[y][x+1];
+								array[y][x+1]=0;
+						
+								isMove = true;
+							}
+						}
+				
+					}
+				}
+    		}else if(39==e.keyCode || 68==e.keyCode){
+    			for(var y=0; y<MAX_NUM; y++){
+					for(var i=0; i<MAX_NUM-1;i++){
+						for(var x=MAX_NUM-1; x>0; x--){
+							if(0==array[y][x]&&0!=array[y][x-1]){
+								array[y][x]=array[y][x-1];
+								array[y][x-1]=0;
+
+								isMove = true;
+							}
+						}
+					}
+				}
+    		}else if(38==e.keyCode || 87==e.keyCode){
+    			for(var x=0; x<MAX_NUM; x++){
+					for(var i=0; i<MAX_NUM-1;i++){
+						for(var y=0; y<MAX_NUM-1; y++){
+							if(0==array[y][x]&&0!=array[y+1][x]){
+								array[y][x]=array[y+1][x];
+								array[y+1][x]=0;
+
+								isMove = true;
+							}
+						}
+					}
+				}
+    		}else if(40==e.keyCode || 83==e.keyCode){
+    			for(var x=0; x<MAX_NUM; x++){
+					for(var i=0; i<MAX_NUM-1;i++){
+						for(var y=MAX_NUM-1; y>0; y--){
+							if(0==array[y][x]&&0!=array[y-1][x]){
+								array[y][x]=array[y-1][x];
+								array[y-1][x]=0;
+
+								isMove = true;
+							}
+						}
+					}
+				}
+    		}
+
+    		return isMove;
+    	}
+
+    	function sum(e){
+    		var isSum = false;
+
+    		if(37==e.keyCode || 65==e.keyCode){//LEFT
+				for(var y=0; y<MAX_NUM; y++){
+					for(var x=0; x<MAX_NUM-1;x++){
+						if(0!=array[y][x]&&array[y][x]==array[y][x+1]){
+							array[y][x]+=array[y][x+1];
+							array[y][x+1]=0;
+					
+							isSum = true;
+						}
+					}
+				}
+			}else if(39==e.keyCode || 68==e.keyCode){//RIGHT
+				for(var y=0; y<MAX_NUM; y++){
+					for(var x=MAX_NUM-1; x>0;x--){
+						if(0!=array[y][x]&&array[y][x]==array[y][x-1]){
+							array[y][x]+=array[y][x-1];
+							array[y][x-1]=0;
+					
+							isSum = true;
+						}
+					}
+				}
+			}else if(38==e.keyCode || 87==e.keyCode){//UP
+				for(var x=0; x<MAX_NUM; x++){
+					for(var y=0; y<MAX_NUM-1; y++){
+						if(0!=array[y][x]&&array[y][x]==array[y+1][x]){
+							array[y][x]+=array[y+1][x];
+							array[y+1][x]=0;
+					
+							isSum = true;
+						}
+					}
+				}
+			}else if(40==e.keyCode || 83==e.keyCode){//down
+				for(var x=0; x<MAX_NUM; x++){
+					for(var y=MAX_NUM-1; y>0; y--){
+						if(0!=array[y][x]&&array[y][x]==array[y-1][x]){
+							array[y][x]+=array[y-1][x];
+							array[y-1][x]=0;
+					
+							isSum = true;
+						}
+					}
+				}
+			}
+	
+			return isSum;
+    	}
+
+    	function checked(){
+    		//是否有空格
+			for(var y =0; y<MAX_NUM; y++){
+				for(var x=0; x<MAX_NUM; x++){
+					if(0==array[y][x]){
+						return true;
+					}
+				}
+			}
+			//横向左右相邻是否可以合成
+			for(var y =0; y<MAX_NUM; y++){
+				for(var x=0; x<MAX_NUM-1; x++){
+					if(array[y][x]==array[y][x+1]){
+						return true;
+					}
+				}
+			}
+			//纵向上下相邻是否可以合成
+			for(var x=0; x<MAX_NUM; x++){
+				for(var y=0; y<MAX_NUM-1; y++){
+					if(array[y][x]==array[y+1][x]){
+						return true;
+					}
+				}	
+			}
+	
+			return false;
+    	}
+    	function pos(x,y){
+    		this.X = x;
+    		this.Y = y;
+    	}
+
+    	function createNum(){
+    		var flag = 0;
+    		var poss;
+    		for(var i=0; i<4; i++){
+				for(var j=0; j<4; j++){
+					if(0==array[i][j]){
+						poss = new pos(j,i);
+						position[flag]=poss;
+
+						flag++;
+					}
+				}
+			}
+
+			var a = parseInt(flag*Math.random());
+			//console.log("flag="+flag);
+			//console.log("a="+a);
+			//console.log(position[0]);
+
+			var m = position[a].Y;
+			var n = position[a].X;
+
+			array[m][n] = parseInt(100*Math.random())>70?4:2;
+    	}
+
+    	createNum();
+    	createNum();
+    	drawMap();
+
+    	window.setTimeout("drawScore()",80);
+    	
+
+
+    	document.onkeydown = function(event){
+    		var e = event || window.event || arguments.callee.caller.arguments[0];
+    		var isMove1 = false;
+    		var isMove2 = false;
+    		var isSum = false;
+
+    		isMove1 = moveSpace(e);
+    		isSum = sum(e);
+    		isMove2 = moveSpace(e);
+
+    		//console.log(e.keyCode);
+
+    		if(isMove1 || isMove2 || isSum){
+    			score+=2;
+    			createNum();
+
+    			if(score>=historyScore){
+    				setHistory();
+    			}
+    		}
+
+    		drawMap();
+    		drawScore();
+
+    		if(!checked() && confirm("游戏结束，是否重新开始？")){
+    			array = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+
+    			score = 0;
+
+    			createNum();
+    			createNum();
+    			drawMap();
+
+    			window.setTimeout("drawScore()",80);
+    		}
+    	}
+
+		
+	</script>
+</html>
